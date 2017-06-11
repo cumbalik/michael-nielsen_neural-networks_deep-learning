@@ -35,7 +35,7 @@ class Network(object):
         later layers
         """
         self.num_layers = len(size)
-        self.sizes = sizes
+        self.size = size
         self.biases = [np.random.randn(y,1) for y in size[1:]]
         self.weights = [np.random.randn(y,x)
                         for x,y in zip(size[:-1], size[1:])]
@@ -58,19 +58,23 @@ class Network(object):
         The 'training_data' is a list of tuples '(x,y)' representing the training
         inputs and the desired outputs.
         """
-        if test_data: n_test = len(test_data)
+        training_data = list(training_data)
+        if test_data:
+            print("HUrra")
+            test_data = list(test_data)
+            n_test = len(test_data)
         n = len(training_data)
         for j in range(epochs):
             random.shuffle(training_data)
-            mini_batchtes = [
-                    traning_data[k:k+mini_batch_size]
+            mini_batches = [
+                    training_data[k:k+mini_batch_size]
                     for k in range(0,n,mini_batch_size)]
             for mini_batch in mini_batches:
                 self.update_mini_batch(mini_batch, eta)
                 
             if test_data:
                 print("Epochs{0}:{1} / {2}".format(
-                        j, self.evaluate(test_data, n_test)))
+                        j, self.evaluate(test_data), n_test))
                 
             else:
                 print("Epoch {0} complete".format(j))
@@ -106,13 +110,15 @@ class Network(object):
         activations = [x] # list to store all the activations, layer by layer
         zs = [] # list to store all the vectors,layer by layer
         for b, w in zip(self.biases, self.weights):
-            z = np.dot(w,x) + b
+            #print("shape of b",np.shape(b))
+            #print("shape of w",np.shape(w))
+            z = np.dot(w,activation) + b
             zs.append(z)
             activation = sigmoid(z)
             activations.append(activation)
             
         # backward pass
-        delta = self.const_derivative(activations[-1],y)*\
+        delta = self.cost_derivative(activations[-1],y)*\
             sigmoid_prime(zs[-1])
         nabla_b[-1] = delta
         nabla_w[-1] = np.dot(delta, activations[-2].transpose())
@@ -145,14 +151,19 @@ class Network(object):
         return (output_activations-y)
     
     ### Miscellaneous functions
-    def sigmoid(z):
-        """The sigmoid function."""
-        return 1/(1+np.exp(-z))
+def sigmoid(z):
+    """The sigmoid function."""
+    out = 1.0/(1.0+np.exp(-z))
+    return out
+
+def sigmoid_prime(z):
+    """Derivative of sigmoid function."""
+    return sigmoid(z)*(1-sigmoid(z))
     
-    def sigmoid_prime(z):
-        """Derivative of sigmoid function."""
-        return sigmoid(z)*(1-sigmoid(z))
-        
+#    import mnist_loader
+#    import imp
+#    training_data, validation_data, test_data = mnist_loader.load_data_wrapper()
+#    imp.reload(mnist_loader)    
         
             
             
