@@ -39,6 +39,8 @@ class Network(object):
         self.biases = [np.random.randn(y,1) for y in size[1:]]
         self.weights = [np.random.randn(y,x)
                         for x,y in zip(size[:-1], size[1:])]
+#        for b in self.biases:
+#            print("b shape", np.shape(b), b.shape)
         """
         size[:-1] means we run from beginn of the elem in size till the before-
         last elem in size
@@ -69,15 +71,21 @@ class Network(object):
             mini_batches = [
                     training_data[k:k+mini_batch_size]
                     for k in range(0,n,mini_batch_size)]
+            ct= 0
             for mini_batch in mini_batches:
-                self.update_mini_batch(mini_batch, eta)
-                
+                if ct==0:
+                    self.update_mini_batch_vec(mini_batch, eta)
+                else:
+                    lel=8
+                ct+=1
+                    
             if test_data:
                 print("Epochs{0}:{1} / {2}".format(
                         j, self.evaluate(test_data), n_test))
                 
             else:
                 print("Epoch {0} complete".format(j))
+            
         
     def update_mini_batch(self, mini_batch, eta):
         """
@@ -86,13 +94,15 @@ class Network(object):
         list of tuples '(x,y)', and 'eta' is the learning rate
         The structure of mini_batch= [(["the vector x1"], y), ([..],y),...]
         """
+        for b in self.biases:
+            print("b shape", np.shape(b))
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
         for x,y in mini_batch:
             delta_nabla_b, delta_nabla_w = self.backprop(x,y)
             nabla_b = [ nb+dnb for nb, dnb in zip(nabla_b, delta_nabla_b)]
             nabla_w = [ nw+dnw for nw, dnw in zip(nabla_w, delta_nabla_w)]
-            
+        
         self.weights = [w-(eta/len(mini_batch))*nw
                         for w,nw in zip(self.weights, nabla_w) ]
         self.biases = [b- (eta/len(mini_batch))*nb
@@ -135,6 +145,101 @@ class Network(object):
             nabla_w[-l] = np.dot(delta, activations[-l-1].transpose())
             
         return (nabla_b, nabla_w)
+    
+    def update_mini_batch_vec(self, mini_batch, eta):
+        nabla_b = [np.zeros(b.shape) for b in self.biases]
+        nabla_w = [np.zeros(w.shape) for w in self.weights]
+#        for b in self.biases:
+#            print("update minibatch vor b shape", np.shape(b))
+        
+        nabla_b, nabla_w = self.backprop_vec(mini_batch)
+        
+#        for b in self.biases:
+#            print("update minibach nach b shape", np.shape(b))
+        self.weights = [w - (eta/len(mini_batch))*nw
+                        for w, nw in zip(self.weights, nabla_w)]
+        self.biases = [b - (eta/len(mini_batch))*nb
+                       for b,nb in zip(self.biases, nabla_b)]
+#        for b in self.biases:
+#            print("update minibach noch nach b shape", np.shape(b))
+        
+    def backprop_vec(self, mini_batch):
+        nabla_b = [np.zeros(b.shape) for b in self.biases]
+        nabla_w = [np.zeros(w.shape) for w in self.weights]
+        """We need first to store all learning examples and targets as numpy
+        array"""
+        X = np.empty(np.shape(mini_batch[0][0]))
+        Y = np.empty(np.shape(mini_batch[0][1]))
+        for x,y in mini_batch:
+            X = np.append(X,x, axis=1)
+            Y = np.append(Y,y,axis=1)
+        X = np.asarray(X);Y=np.asarray(Y)
+        X = X[:,1:]; Y = Y[:,1:]
+#        print("Shape of X:",X.shape, np.shape(X))
+#        print("Shape of Y:",Y.shape, np.shape(Y))
+        #You can check the equality:
+        n1 = np.shape(mini_batch[0][0])[0]
+#        n2 = np.shape(mini_batch[0][1])[0]
+        print("Number of true should be:",len(mini_batch))
+        for i in range(0,len(mini_batch),1):
+            print(np.array_equal(X[:,i].reshape(n1,1),mini_batch[i][0]))
+        #The output is correct :)
+        
+        # feedforward
+        activations  = X
+        activations_list = [X]
+        z_list = []
+#        ct=0
+#        for b in self.biases:
+#            print("b shape", np.shape(b), b.shape)
+        for w,b in zip(self.weights, self.biases):
+            #b = b.transpose()
+            #b = np.array([b,]*len(mini_batch)).transpose()
+#            print("shape of b in",ct,np.shape(b))
+            Z = np.dot(w, activations) +b
+#            print("shape of Z with no b:",ct,np.shape(Z))
+            z_list.append(Z)
+            activations = sigmoid(Z)
+            activations_list.append(activations)
+            
+        #print(activations_list[0].shape, activations_list[1].shape,activations_list[2].shape)
+        # backward pass
+        delta = self.cost_derivative(activations_list[-1],Y)*sigmoid_prime(z_list[-1])
+        #sum([delta[:,i] for i in range(len(mini_batch))])
+        nabla_b[-1] = np.sum(delta, axis=1).reshape(np.shape(delta)[0],1)
+        nabla_w[-1] = sum([np.dot(delta[:,i],activations_list[-1][:,i].transpose())\
+                          for i in range(len(mini_batch))])
+        # we backpropagate the error and calculate the gradient
+        for l in range(2, self.num_layers):
+            Z = z_list[-l]
+            sp = sigmoid_prime(Z)
+            delta =np.dot(self.weights[-l+1].transpose(),delta)*sp
+            #[delta[:,i] for i in range(len(mini_batch))]
+            nabla_b[-l] = np.sum(delta, axis =1).reshape(np.shape(delta)[0],1)
+            """The problem occurs in the nex commant in the last part of layer
+            ValueError: shapes (30,) and (784,) not aligned: 30 (dim 0) != 784 (dim 0)
+            so you have to have (30,1) amd (784,1).
+            The dimension of a with shape (30,) is a.ndim is if such case occurs
+            change it to (30,1)
+            """
+#            print(np.shape(activations_list[-l-1][:,0]))
+            summa = 0
+            for i in range(len(mini_batch)):
+                delta_tmp = delta[:,i]
+                activation_tmp = activations_list[-l-1][:,i].transpose()
+                if delta_tmp.ndim == 1:
+                    delta_tmp = delta_tmp.reshape(np.shape(delta_tmp)[0],1)
+                if activation_tmp.ndim == 1:
+                    activation_tmp = activation_tmp.reshape(1,np.shape(activation_tmp)[0])
+                    
+                summa = summa + np.dot(delta_tmp, activation_tmp)
+                
+            nabla_w[-l] = summa
+#            nabla_w[-l] = sum([np.dot(delta[:,i],activations_list[-l-1][:,i].transpose())\
+#                          for i in range(len(mini_batch))])
+            
+        
+        return (nabla_b,nabla_w)        
     
     def evaluate(self, test_data):
         """Return the number of test inputs for which the neural network outputs
