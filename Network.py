@@ -71,14 +71,9 @@ class Network(object):
             mini_batches = [
                     training_data[k:k+mini_batch_size]
                     for k in range(0,n,mini_batch_size)]
-            ct= 0
             for mini_batch in mini_batches:
-                if ct==0:
-                    self.update_mini_batch_vec(mini_batch, eta)
-                else:
-                    lel=8
-                ct+=1
-                    
+                self.update_mini_batch_vec(mini_batch, eta)
+
             if test_data:
                 print("Epochs{0}:{1} / {2}".format(
                         j, self.evaluate(test_data), n_test))
@@ -147,6 +142,8 @@ class Network(object):
         return (nabla_b, nabla_w)
     
     def update_mini_batch_vec(self, mini_batch, eta):
+        """ The gets a mini_batch and hands the backprop_vec the whole mini_batch
+        over instead one learning example and its target """
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
 #        for b in self.biases:
@@ -156,6 +153,8 @@ class Network(object):
         
 #        for b in self.biases:
 #            print("update minibach nach b shape", np.shape(b))
+        """ The following code calls serial two loops instead you can call just one
+        loop and within an iteration you can do both calculations"""
         self.weights = [w - (eta/len(mini_batch))*nw
                         for w, nw in zip(self.weights, nabla_w)]
         self.biases = [b - (eta/len(mini_batch))*nb
@@ -167,24 +166,26 @@ class Network(object):
         nabla_b = [np.zeros(b.shape) for b in self.biases]
         nabla_w = [np.zeros(w.shape) for w in self.weights]
         """We need first to store all learning examples and targets as numpy
-        array"""
+        array. The array X contains for each column a learning example and Y the
+        same"""
         X = np.empty(np.shape(mini_batch[0][0]))
         Y = np.empty(np.shape(mini_batch[0][1]))
         for x,y in mini_batch:
             X = np.append(X,x, axis=1)
             Y = np.append(Y,y,axis=1)
-        X = np.asarray(X);Y=np.asarray(Y)
+#        X = np.asarray(X);Y=np.asarray(Y)
         X = X[:,1:]; Y = Y[:,1:]
 #        print("Shape of X:",X.shape, np.shape(X))
 #        print("Shape of Y:",Y.shape, np.shape(Y))
         #You can check the equality:
-        n1 = np.shape(mini_batch[0][0])[0]
+#        n1 = np.shape(mini_batch[0][0])[0]
 #        n2 = np.shape(mini_batch[0][1])[0]
-        print("Number of true should be:",len(mini_batch))
-        for i in range(0,len(mini_batch),1):
-            print(np.array_equal(X[:,i].reshape(n1,1),mini_batch[i][0]))
-        #The output is correct :)
+#        print("Number of true should be:",len(mini_batch))
+#        for i in range(0,len(mini_batch),1):
+#            print(np.array_equal(Y[:,i].reshape(n2,1),mini_batch[i][1]))
+        #The X and Y are correct:)
         
+        """ We will now calculate in "parallel" all training examples """
         # feedforward
         activations  = X
         activations_list = [X]
@@ -192,23 +193,49 @@ class Network(object):
 #        ct=0
 #        for b in self.biases:
 #            print("b shape", np.shape(b), b.shape)
+        """ In backprop function would be this loop calld for each traning
+        example in mini_batch"""
         for w,b in zip(self.weights, self.biases):
             #b = b.transpose()
             #b = np.array([b,]*len(mini_batch)).transpose()
 #            print("shape of b in",ct,np.shape(b))
             Z = np.dot(w, activations) +b
+#            act0 = activations[:,4].reshape(np.shape(activations[:,4])[0],1)
+#            z1 = np.dot(w,act0) +b
+#            print("shpae of z1",np.shape(z1), "shape fof b", np.shape(b))
+#            print("shpae of activa",np.shape(activations[:,4]))
+#            print("printing t",z1,Z[:,4])
 #            print("shape of Z with no b:",ct,np.shape(Z))
             z_list.append(Z)
             activations = sigmoid(Z)
+#            act1 = sigmoid(z1)
+#            print("printing act1",act1,activations[:,4])
             activations_list.append(activations)
             
         #print(activations_list[0].shape, activations_list[1].shape,activations_list[2].shape)
+        """ In backward pass is the calculation idea the same as in update_mini_batch
+        by the determination of nabla_b and nabla_w i.e. a just moved the two for-loops
+        into here """
         # backward pass
         delta = self.cost_derivative(activations_list[-1],Y)*sigmoid_prime(z_list[-1])
         #sum([delta[:,i] for i in range(len(mini_batch))])
         nabla_b[-1] = np.sum(delta, axis=1).reshape(np.shape(delta)[0],1)
-        nabla_w[-1] = sum([np.dot(delta[:,i],activations_list[-1][:,i].transpose())\
-                          for i in range(len(mini_batch))])
+        summy=0
+        for i in range(len(mini_batch)):
+            delta_tmp = delta[:,i]
+            activation_tmp = activations_list[-2][:,i]
+            if delta_tmp.ndim == 1:
+                delta_tmp = delta_tmp.reshape(np.shape(delta_tmp)[0],1)
+            if activation_tmp.ndim == 1:
+                activation_tmp = activation_tmp.reshape(1,np.shape(activation_tmp)[0])
+                    
+            summy = summy +np.dot(delta_tmp, activation_tmp)
+            
+        nabla_w[-1] = summy
+        
+#        nabla_w[-1] = sum([np.dot(delta[:,i].reshape(np.shape(delta)[0],1),\
+#                          (activations_list[-2][:,i].reshape(activations_list[-2][:,i][0],1)).transpose())\
+#                          for i in range(len(mini_batch))])
         # we backpropagate the error and calculate the gradient
         for l in range(2, self.num_layers):
             Z = z_list[-l]
@@ -216,7 +243,7 @@ class Network(object):
             delta =np.dot(self.weights[-l+1].transpose(),delta)*sp
             #[delta[:,i] for i in range(len(mini_batch))]
             nabla_b[-l] = np.sum(delta, axis =1).reshape(np.shape(delta)[0],1)
-            """The problem occurs in the nex commant in the last part of layer
+            """The problem occurs in the last part of layer
             ValueError: shapes (30,) and (784,) not aligned: 30 (dim 0) != 784 (dim 0)
             so you have to have (30,1) amd (784,1).
             The dimension of a with shape (30,) is a.ndim is if such case occurs
@@ -265,11 +292,6 @@ def sigmoid_prime(z):
     """Derivative of sigmoid function."""
     return sigmoid(z)*(1-sigmoid(z))
     
-#    import mnist_loader
-#    import imp
-#    training_data, validation_data, test_data = mnist_loader.load_data_wrapper()
-#    imp.reload(mnist_loader)    
-        
             
             
             
